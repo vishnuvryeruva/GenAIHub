@@ -1,0 +1,31 @@
+{
+  "xsappname": "comsaptrialfioriai",
+  "tenant-mode": "dedicated",
+  "description": "Security profile for the comsaptrialfioriai application",
+  "scopes": [
+    {
+      "name": "$XSAPPNAME.GenAI",
+      "description": "Basic access to the application"
+    }
+  ],
+  "role-templates": [
+    {
+      "name": "GenAI",
+      "description": "AI Hub",
+      "scope-references": [
+        "$XSAPPNAME.GenAI"
+      ]
+    }
+  ],
+  "attributes": [],
+  "role-collections": [],
+  "oauth2-configuration": {
+    "redirect-uris": [
+      "https://*.applicationstudio.cloud.sap/**",
+      "https://*.ondemand.com/**",
+      "http://localhost:8080/**"
+    ],
+    "token-validity": 3600,
+    "refresh-token-validity": 86400
+  }
+}
