@@ -3,11 +3,7 @@ sap.ui.define(
   function (Controller, JSONModel) {
     "use strict";
 
-    const API_VERSION = "2023-05-15";
-
     return Controller.extend("com.sap.trial.fioriai.controller.MainView", {
-      _sCsrfToken: null,
-
       onInit: function () {
         const oUiModel = new JSONModel({
           busy: false,
@@ -37,19 +33,42 @@ sap.ui.define(
         const oUiModel = this.getView().getModel("ui");
         const sTxtInput = oUiModel.getProperty("/summary/txtInput");
         oUiModel.setProperty("/busy", true);
-        const txtSummary = await this._apiChatCompletion([
-          {
-            role: "system",
-            content:
-              "Write a TL;DR/summary of the user content in a paragraph.",
-          },
-          {
-            role: "user",
-            content: sTxtInput,
-          },
-        ]);
-        oUiModel.setProperty("/busy", false);
-        oUiModel.setProperty("/summary/txtSummary", txtSummary);
+        
+        try {
+          // Using Hugging Face API for summarization (BART model)
+          const response = await fetch(
+            "https://api-inference.huggingface.co/models/facebook/bart-large-cnn",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                // You'll need to replace this with your own API key from https://huggingface.co/settings/tokens
+                "Authorization": "Bearer hf_kqLipGPXUqVTakDYRVwtWZVHoLkijaSvdAj"
+              },
+              body: JSON.stringify({
+                inputs: sTxtInput,
+                parameters: {
+                  max_length: 100,
+                  min_length: 30
+                }
+              })
+            }
+          );
+          
+          if (!response.ok) {
+            throw new Error(`API request failed with status ${response.status}`);
+          }
+          
+          const result = await response.json();
+          const txtSummary = result[0]?.summary_text || "No summary could be generated.";
+          oUiModel.setProperty("/summary/txtSummary", txtSummary);
+        } catch (error) {
+          console.error("Summarization API error:", error);
+          oUiModel.setProperty("/summary/txtSummary", 
+            "Could not generate a summary. Hugging Face API might be temporarily unavailable or the API key needs to be updated.");
+        } finally {
+          oUiModel.setProperty("/busy", false);
+        }
       },
 
       onBtnChatbotSendPress: async function () {
@@ -65,13 +84,52 @@ sap.ui.define(
         oUiModel.setProperty("/chatbot/messages", oMessages);
         oUiModel.setProperty("/chatbot/txtInput", "");
         oUiModel.setProperty("/busy", true);
-        const txtSummary = await this._apiChatCompletion(oMessages);
-        oUiModel.setProperty("/busy", false);
-        oMessages.push({
-          role: "assistant",
-          content: txtSummary
-        });
-        oUiModel.setProperty("/chatbot/messages", oMessages);
+        
+        try {
+          // For chat functionality, we'll use a different HF model that's better for conversations
+          const lastUserMessage = txtInput;
+          const conversationHistory = oMessages
+            .filter(msg => msg.role !== "system")
+            .map(msg => `${msg.role === "user" ? "Human" : "Assistant"}: ${msg.content}`)
+            .join("\n");
+            
+          const response = await fetch(
+            "https://api-inference.huggingface.co/models/google/flan-t5-xl",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                // You'll need to replace this with your own API key from https://huggingface.co/settings/tokens
+                "Authorization": "Bearer hf_kqLipGPXUqVTakDYRVwtWZVHoLkijaSvdAj"
+              },
+              body: JSON.stringify({
+                inputs: conversationHistory + "\nHuman: " + lastUserMessage + "\nAssistant:"
+              })
+            }
+          );
+          
+          if (!response.ok) {
+            throw new Error(`API request failed with status ${response.status}`);
+          }
+          
+          const result = await response.json();
+          const aiResponse = result[0]?.generated_text || "I'm sorry, I couldn't generate a response.";
+          
+          oMessages.push({
+            role: "assistant",
+            content: aiResponse
+          });
+          oUiModel.setProperty("/chatbot/messages", oMessages);
+        } catch (error) {
+          console.error("Chat API error:", error);
+          oMessages.push({
+            role: "assistant",
+            content: "I'm sorry, I'm having trouble connecting to my language model. Please try again later."
+          });
+          oUiModel.setProperty("/chatbot/messages", oMessages);
+        } finally {
+          oUiModel.setProperty("/busy", false);
+        }
       },
 
       /**
@@ -82,53 +140,7 @@ sap.ui.define(
         return $.sap.getModulePath(
           this.getOwnerComponent().getManifestEntry("/sap.app/id")
         );
-      },
-
-      /**
-       * API - fetches CSRF token
-       *
-       * **Note**: For testing/development, you can turn off CSRF protection in the `xs-app.json`
-       * by setting `csrfProtection: false` for `"source": "^/api/(.*)$"` route.
-       */
-      _apiFetchCsrfToken: async function () {
-        if (!this._sCsrfToken) {
-          const res = await fetch(`${this._getUrlModulePrefix()}/index.html`, {
-            method: "HEAD",
-            headers: {
-              "X-CSRF-Token": "fetch",
-            },
-            credentials: "same-origin",
-          });
-          this._sCsrfToken = res.headers.get("x-csrf-token");
-        }
-        return this._sCsrfToken;
-      },
-
-      /**
-       * API - generates a summary by making an API call to GenAI Hub
-       * @param {Object[]} oMessages an array of messages
-       * @returns {Promise<string>} chat completion
-       */
-      _apiChatCompletion: async function (oMessages) {
-        const res = await fetch(
-          `${this._getUrlModulePrefix()}/api/chat/completions?api-version=${API_VERSION}`,
-          {
-            method: "POST",
-            headers: {
-              "X-CSRF-Token": await this._apiFetchCsrfToken(),
-              "Content-Type": "application/json",
-              "AI-Resource-Group": "default",
-            },
-            credentials: "same-origin",
-            body: JSON.stringify({
-              messages: oMessages,
-            }),
-          }
-        );
-        const resData = await res.json();
-        // extract the message content of first choice
-        return resData.choices[0].message.content;
-      },
+      }
     });
   }
 );

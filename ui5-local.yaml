@@ -25,10 +25,15 @@ server:
         port: 35729
         path: webapp
         delay: 300
-    - name: fiori-tools-proxy
+    - name: fiori-tools-proxy # This will handle general proxying if needed, but approuter takes precedence for xs-app.json routes
       afterMiddleware: compression
       configuration:
-        ignoreCertError: false # If set to true, certificate errors will be ignored. E.g. self-signed certificates will be accepted
+        ignoreCertError: false
+        # ui5: # We let approuter handle ui5 destination defined in its own config below
+        #   path:
+        #     - /resources
+        #     - /test-resources
+        #   url: https://ui5.sap.com
     - name: fiori-tools-preview
       afterMiddleware: fiori-tools-appreload
       configuration:
@@ -37,6 +42,11 @@ server:
     - name: ui5-middleware-approuter
       afterMiddleware: compression
       configuration:
-        authenticationMethod: "route"
+        authenticationMethod: "none"
         xsappJson: "./xs-app.json"
-        appendAuthRoute: true # trigger auth, inorder to connect to destination service
+        appendAuthRoute: false
+        destinations:
+          # - name: "HMT_GENERATIVE_AI_HUB"
+          #   url: "http://192.168.171.43:8000"
+          - name: "ui5"
+            url: "https://ui5.sap.com"

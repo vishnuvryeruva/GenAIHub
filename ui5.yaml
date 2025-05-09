@@ -9,7 +9,7 @@ server:
     - name: fiori-tools-proxy
       afterMiddleware: compression
       configuration:
-        ignoreCertError: false # If set to true, certificate errors will be ignored. E.g. self-signed certificates will be accepted
+        ignoreCertError: false
         ui5:
           path:
             - /resources
@@ -31,4 +31,4 @@ server:
       configuration:
         authenticationMethod: "route"
         xsappJson: "./xs-app.json"
-        appendAuthRoute: true # trigger auth, inorder to connect to destination service
+        appendAuthRoute: true
